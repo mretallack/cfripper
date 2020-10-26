@@ -27,8 +27,9 @@ def setup_logging(level: str) -> None:
     logging.basicConfig(level=LOGGING_LEVELS[level], format="%(message)s")
 
 
-def init_cfripper() -> Tuple[Config, RuleProcessor]:
-    config = Config(rules=DEFAULT_RULES.keys())
+def init_cfripper(stack_name, rule_to_action_whitelist, rule_to_resource_whitelist) -> Tuple[Config, RuleProcessor]:
+    config = Config(stack_name=stack_name, rules=DEFAULT_RULES.keys(), 
+                    rule_to_action_whitelist=rule_to_action_whitelist, rule_to_resource_whitelist=rule_to_resource_whitelist)
     rule_processor = RuleProcessor(*[DEFAULT_RULES.get(rule)(config) for rule in config.rules])
     return config, rule_processor
 
@@ -82,7 +83,7 @@ def output_handling(template_name: str, result: str, output_format: str, output_
 
 
 def process_template(
-    template, resolve: bool, resolve_parameters: Optional[Dict], output_folder: Optional[str], output_format: str
+    template, resolve: bool, resolve_parameters: Optional[Dict], output_folder: Optional[str], output_format: str, action_whitelist: str, resource_whitelist: str, stack_name: str
 ) -> None:
     logging.info(f"Analysing {template.name}...")
 
@@ -90,7 +91,21 @@ def process_template(
     if resolve:
         cfmodel = cfmodel.resolve(resolve_parameters)
 
-    config, rule_processor = init_cfripper()
+    rule_to_action_whitelist=None
+    
+    if action_whitelist != None:
+        rule_to_action_whitelist = convert_json_or_yaml_to_dict(action_whitelist.read())
+
+    print(rule_to_action_whitelist)
+
+    rule_to_resource_whitelist=None
+    
+    if resource_whitelist != None:
+        rule_to_resource_whitelist = convert_json_or_yaml_to_dict(resource_whitelist.read())
+
+    config, rule_processor = init_cfripper(stack_name=stack_name, 
+                                           rule_to_action_whitelist=rule_to_action_whitelist,
+                                           rule_to_resource_whitelist=rule_to_resource_whitelist)
 
     result = analyse_template(cfmodel, rule_processor, config)
 
@@ -115,6 +130,28 @@ def process_template(
     help=(
         "JSON/YML file containing key-value pairs used for resolving CloudFormation files with templated parameters. "
         'For example, {"abc": "ABC"} will change all occurrences of {"Ref": "abc"} in the CloudFormation file to "ABC".'
+    ),
+)
+@click.option(
+    "--action-whitelist",
+    type=click.File("r"),
+    help=(
+        "The action whitelist file to use"
+    ),
+)
+@click.option(
+    "--resource-whitelist",
+    type=click.File("r"),
+    help=(
+        "The resource whitelist file to use"
+    ),
+)
+@click.option(
+    "--stack-name",
+    type=click.STRING,
+    default="unknown",
+    help=(
+        "The stack name"
     ),
 )
 @click.option(
